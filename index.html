@@ -1,0 +1,1288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Review Insights</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0a0a0f;
+      --surface:   #111118;
+      --card:      #16161f;
+      --border:    #2a2a3a;
+      --accent:    #e8ff57;
+      --accent2:   #57c8ff;
+      --pos:       #4fffb0;
+      --neg:       #ff5757;
+      --neutral:   #aaa8c4;
+      --text:      #f0effe;
+      --muted:     #6e6c88;
+      --demo:      #c084fc;   /* purple accent for demo mode */
+      --demo-dim:  rgba(192,132,252,0.08);
+      --font-head: 'Syne', sans-serif;
+      --font-mono: 'DM Mono', monospace;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-head);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Grain overlay ── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+      opacity: 0.4;
+    }
+
+    .wrap { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; padding: 0 24px 80px; }
+
+    /* ── Header ── */
+    header {
+      padding: 60px 0 48px;
+      display: flex; align-items: flex-end; justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 40px;
+    }
+    .logo-block {}
+    .logo-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 13px; letter-spacing: 0.2em;
+      color: var(--accent); text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    h1 {
+      font-size: clamp(28px, 5vw, 44px);
+      font-weight: 800; line-height: 1;
+      letter-spacing: -0.03em;
+    }
+    h1 span { color: var(--accent); }
+    .status-pill {
+      font-family: var(--font-mono);
+      font-size: 13px; padding: 6px 14px;
+      border-radius: 100px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      display: flex; align-items: center; gap: 7px;
+      transition: all 0.3s;
+    }
+    .status-pill.ok { border-color: var(--pos); color: var(--pos); }
+    .status-pill.degraded { border-color: var(--neg); color: var(--neg); }
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: currentColor;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity:1; } 50% { opacity:0.3; }
+    }
+
+    /* ── Mode tabs ── */
+    .mode-tabs {
+      display: flex; gap: 4px;
+      margin-bottom: 36px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 4px;
+      width: fit-content;
+    }
+    .tab-btn {
+      font-family: var(--font-mono);
+      font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase;
+      padding: 8px 20px; border-radius: 7px;
+      border: none; background: transparent;
+      color: var(--muted); cursor: pointer;
+      transition: all 0.2s;
+      display: flex; align-items: center; gap: 7px;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active-dataset {
+      background: rgba(232,255,87,0.12);
+      color: var(--accent);
+    }
+    .tab-btn.active-demo {
+      background: var(--demo-dim);
+      color: var(--demo);
+    }
+    .tab-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: currentColor; flex-shrink: 0;
+    }
+
+    /* ── Panels ── */
+    .panel { display: none; }
+    .panel.active { display: block; animation: fadeUp 0.25s ease; }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Search bar ── */
+    .search-section { margin-bottom: 40px; }
+    .search-label {
+      font-family: var(--font-mono);
+      font-size: 13px; letter-spacing: 0.18em; color: var(--muted);
+      text-transform: uppercase; margin-bottom: 12px;
+      display: block;
+    }
+    .search-row {
+      display: flex; gap: 10px;
+    }
+    input[type="text"], textarea, select {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 18px;
+      font-family: var(--font-mono);
+      font-size: 14px; color: var(--text);
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      width: 100%;
+    }
+    input[type="text"]::placeholder,
+    textarea::placeholder { color: var(--muted); }
+    input[type="text"]:focus,
+    textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(232,255,87,0.08);
+    }
+    textarea { resize: vertical; min-height: 90px; line-height: 1.6; }
+    select {
+      appearance: none;
+      cursor: pointer;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236e6c88' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      padding-right: 38px;
+    }
+    select option { background: var(--surface); }
+
+    button.primary {
+      background: var(--accent);
+      color: #0a0a0f;
+      border: none; border-radius: 8px;
+      padding: 14px 28px;
+      font-family: var(--font-head);
+      font-size: 15px; font-weight: 700;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: transform 0.15s, opacity 0.15s;
+      white-space: nowrap;
+    }
+    button.primary:hover { opacity: 0.88; transform: translateY(-1px); }
+    button.primary:active { transform: translateY(0); }
+    button.primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    button.demo-btn {
+      background: var(--demo-dim);
+      color: var(--demo);
+      border: 1px solid rgba(192,132,252,0.3);
+      border-radius: 8px;
+      padding: 12px 22px;
+      font-family: var(--font-head);
+      font-size: 14px; font-weight: 700;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    button.demo-btn:hover { background: rgba(192,132,252,0.15); border-color: var(--demo); }
+    button.demo-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    button.ghost-btn {
+      background: transparent;
+      color: var(--neg);
+      border: 1px solid rgba(255,87,87,0.3);
+      border-radius: 8px;
+      padding: 10px 18px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    button.ghost-btn:hover { background: rgba(255,87,87,0.07); border-color: var(--neg); }
+
+    /* ── Product browser ── */
+    .products-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .section-title {
+      font-family: var(--font-mono);
+      font-size: 13px; letter-spacing: 0.18em;
+      color: var(--muted); text-transform: uppercase;
+    }
+    .products-bar-right {
+      display: flex; align-items: center; gap: 12px;
+    }
+    .product-count {
+      font-family: var(--font-mono);
+      font-size: 13px; color: var(--muted);
+    }
+    .page-nav {
+      display: flex; align-items: center; gap: 6px;
+    }
+    .page-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--muted);
+      width: 28px; height: 28px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; font-size: 13px;
+      transition: all 0.15s;
+      user-select: none;
+    }
+    .page-btn:hover:not(:disabled) {
+      border-color: var(--accent); color: var(--accent);
+      background: rgba(232,255,87,0.05);
+    }
+    .page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .page-info {
+      font-family: var(--font-mono);
+      font-size: 13px; color: var(--muted);
+      min-width: 50px; text-align: center;
+    }
+    .products-scroll {
+      display: flex; gap: 8px; flex-wrap: wrap;
+      margin-bottom: 40px;
+      min-height: 60px;
+      animation: fadeChips 0.2s ease;
+    }
+    @keyframes fadeChips {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .product-chip {
+      font-family: var(--font-mono);
+      font-size: 13px; padding: 6px 14px;
+      border-radius: 6px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--neutral);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .product-chip:hover {
+      border-color: var(--accent); color: var(--accent);
+      background: rgba(232,255,87,0.05);
+    }
+
+    /* ── Demo Mode specific ── */
+    .demo-header {
+      background: var(--demo-dim);
+      border: 1px solid rgba(192,132,252,0.2);
+      border-radius: 12px;
+      padding: 20px 24px;
+      margin-bottom: 28px;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 16px;
+    }
+    .demo-header-left {}
+    .demo-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 13px; letter-spacing: 0.18em;
+      color: var(--demo); text-transform: uppercase; margin-bottom: 4px;
+    }
+    .demo-product-name {
+      font-size: 18px; font-weight: 700; color: var(--text);
+      letter-spacing: -0.02em;
+    }
+    .demo-product-name.empty { color: var(--muted); font-weight: 400; font-size: 15px; }
+    .demo-review-count {
+      font-family: var(--font-mono); font-size: 13px; color: var(--demo);
+      margin-top: 4px;
+    }
+    .demo-header-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+    .demo-step {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 22px 24px;
+      margin-bottom: 16px;
+    }
+    .demo-step-label {
+      font-family: var(--font-mono);
+      font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase;
+      color: var(--demo); margin-bottom: 14px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .step-num {
+      width: 20px; height: 20px;
+      background: rgba(192,132,252,0.15);
+      border: 1px solid rgba(192,132,252,0.3);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700; color: var(--demo);
+      flex-shrink: 0;
+    }
+    .form-row { display: flex; gap: 10px; align-items: flex-start; }
+    .form-col { display: flex; flex-direction: column; gap: 10px; flex: 1; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-label {
+      font-family: var(--font-mono);
+      font-size: 13px; letter-spacing: 0.12em; color: var(--muted);
+      text-transform: uppercase;
+    }
+    .form-hint {
+      font-family: var(--font-mono);
+      font-size: 13px; color: var(--muted); margin-top: 4px;
+    }
+
+    /* demo product chips */
+    .demo-product-chip {
+      font-family: var(--font-mono);
+      font-size: 13px; padding: 6px 14px;
+      border-radius: 6px;
+      background: var(--demo-dim);
+      border: 1px solid rgba(192,132,252,0.2);
+      color: var(--demo);
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .demo-product-chip:hover { border-color: var(--demo); background: rgba(192,132,252,0.14); }
+    .demo-product-chip.selected { border-color: var(--demo); box-shadow: 0 0 0 2px rgba(192,132,252,0.15); }
+    .chip-count {
+      background: rgba(192,132,252,0.15);
+      padding: 1px 6px; border-radius: 3px;
+      font-size: 13px;
+    }
+
+    /* demo review queue */
+    .review-queue {
+      display: flex; flex-direction: column; gap: 8px;
+      margin-top: 12px;
+      max-height: 260px; overflow-y: auto;
+    }
+    .review-queue::-webkit-scrollbar { width: 4px; }
+    .review-queue::-webkit-scrollbar-track { background: transparent; }
+    .review-queue::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .review-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      display: flex; align-items: flex-start; gap: 10px;
+    }
+    .review-item-body { flex: 1; min-width: 0; }
+    .review-item-text {
+      font-size: 13px; color: var(--text);
+      line-height: 1.5;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .review-item-meta {
+      font-family: var(--font-mono);
+      font-size: 13px; color: var(--muted); margin-top: 3px;
+      display: flex; gap: 10px;
+    }
+    .star-display {
+      color: var(--accent); font-size: 13px;
+    }
+
+    /* rating selector */
+    .rating-row {
+      display: flex; gap: 8px; align-items: center;
+    }
+    .star-btn {
+      background: none; border: none; cursor: pointer;
+      font-size: 20px; padding: 2px 3px;
+      color: var(--border);
+      transition: color 0.1s, transform 0.1s;
+      line-height: 1;
+    }
+    .star-btn:hover,
+    .star-btn.lit { color: var(--accent); }
+    .star-btn:hover { transform: scale(1.15); }
+    .rating-val {
+      font-family: var(--font-mono);
+      font-size: 13px; color: var(--muted); margin-left: 4px;
+    }
+
+    /* ── Toast notifications ── */
+    .toast-rack {
+      position: fixed; bottom: 28px; right: 28px;
+      display: flex; flex-direction: column; gap: 8px;
+      z-index: 9999; pointer-events: none;
+    }
+    .toast {
+      font-family: var(--font-mono);
+      font-size: 13px; padding: 12px 18px;
+      border-radius: 8px; border: 1px solid;
+      min-width: 220px; max-width: 340px;
+      animation: slideIn 0.25s ease;
+      pointer-events: auto;
+    }
+    .toast.success {
+      background: rgba(79,255,176,0.1);
+      border-color: rgba(79,255,176,0.3);
+      color: var(--pos);
+    }
+    .toast.error {
+      background: rgba(255,87,87,0.1);
+      border-color: rgba(255,87,87,0.3);
+      color: var(--neg);
+    }
+    .toast.info {
+      background: rgba(192,132,252,0.1);
+      border-color: rgba(192,132,252,0.3);
+      color: var(--demo);
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(20px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes slideOut {
+      from { opacity: 1; transform: translateX(0); }
+      to   { opacity: 0; transform: translateX(20px); }
+    }
+
+    /* ── Loader ── */
+    .loader {
+      display: none; text-align: center; padding: 60px 0;
+    }
+    .loader.active { display: block; }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto 16px;
+    }
+    .spinner.demo-spin { border-top-color: var(--demo); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loader p { font-family: var(--font-mono); font-size: 13px; color: var(--muted); }
+
+    /* ── Error ── */
+    .error-box {
+      display: none;
+      background: rgba(255,87,87,0.07);
+      border: 1px solid rgba(255,87,87,0.3);
+      border-radius: 10px;
+      padding: 18px 22px;
+      font-family: var(--font-mono);
+      font-size: 13px; color: var(--neg);
+      margin-bottom: 32px;
+    }
+    .error-box.active { display: block; }
+
+    /* ── Results ── */
+    #results { display: none; }
+    #results.active { display: block; animation: fadeUp 0.4s ease; }
+    #demo-results { display: none; }
+    #demo-results.active { display: block; animation: fadeUp 0.4s ease; }
+
+    /* ── Product header ── */
+    .result-header {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 20px;
+      padding: 28px 32px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      margin-bottom: 20px;
+    }
+    .result-header.demo-result-header {
+      border-color: rgba(192,132,252,0.25);
+      background: linear-gradient(135deg, var(--card) 0%, rgba(192,132,252,0.05) 100%);
+    }
+    .result-pid {
+      font-family: var(--font-mono);
+      font-size: 13px; letter-spacing: 0.15em;
+      color: var(--accent2); text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .result-pid.demo-pid { color: var(--demo); }
+    .result-summary {
+      font-size: 16px; line-height: 1.6;
+      color: var(--text); max-width: 560px;
+    }
+    .confidence-badge {
+      flex-shrink: 0;
+      text-align: right;
+    }
+    .confidence-level {
+      font-size: 13px; font-family: var(--font-mono);
+      padding: 5px 14px; border-radius: 6px;
+      display: inline-block; margin-bottom: 6px;
+    }
+    .confidence-level.high  { background: rgba(79,255,176,0.1); color: var(--pos); border: 1px solid rgba(79,255,176,0.25); }
+    .confidence-level.medium{ background: rgba(232,255,87,0.1); color: var(--accent); border: 1px solid rgba(232,255,87,0.25); }
+    .confidence-level.low   { background: rgba(255,87,87,0.1); color: var(--neg); border: 1px solid rgba(255,87,87,0.25); }
+    .confidence-level.insufficient { background: rgba(110,108,136,0.1); color: var(--muted); border: 1px solid var(--border); }
+    .review-count { font-family: var(--font-mono); font-size: 13px; color: var(--muted); }
+
+    /* ── Two-col grid ── */
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+    @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px 26px;
+    }
+    .card-title {
+      font-size: 13px; font-family: var(--font-mono);
+      letter-spacing: 0.15em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 18px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .card-title .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+    }
+    .dot-pos  { background: var(--pos); }
+    .dot-neg  { background: var(--neg); }
+    .dot-asp  { background: var(--accent2); }
+    .dot-disc { background: var(--demo); }
+
+    /* Pros / Cons items */
+    .pc-item { margin-bottom: 16px; }
+    .pc-item:last-child { margin-bottom: 0; }
+    .pc-aspect {
+      font-size: 15px; font-weight: 700;
+      text-transform: capitalize; margin-bottom: 4px;
+    }
+    .pc-desc {
+      font-family: var(--font-mono); font-size: 13px;
+      color: var(--muted); margin-bottom: 8px;
+    }
+    .pc-evidence {
+      font-size: 13px; color: var(--neutral);
+      line-height: 1.6; font-style: italic;
+      padding-left: 12px;
+      border-left: 2px solid var(--border);
+    }
+    .pro .pc-aspect { color: var(--pos); }
+    .con .pc-aspect { color: var(--neg); }
+    .pro .pc-evidence { border-left-color: rgba(79,255,176,0.3); }
+    .con .pc-evidence { border-left-color: rgba(255,87,87,0.3); }
+
+    /* ── Aspects table ── */
+    .aspects-card { margin-bottom: 20px; }
+    .aspects-list { display: flex; flex-direction: column; gap: 12px; }
+    .aspect-row {
+      display: grid;
+      grid-template-columns: 160px 1fr 60px 100px;
+      align-items: center; gap: 12px;
+    }
+    @media (max-width: 600px) {
+      .aspect-row { grid-template-columns: 120px 1fr 50px; }
+      .aspect-mentions { display: none; }
+    }
+    .aspect-name {
+      font-size: 14px; font-weight: 600;
+      text-transform: capitalize; color: var(--text);
+    }
+    .bar-track {
+      height: 6px; border-radius: 3px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%; border-radius: 3px;
+      transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+    }
+    .bar-fill.positive { background: var(--pos); }
+    .bar-fill.negative { background: var(--neg); }
+    .bar-fill.mixed    { background: var(--accent); }
+    .aspect-score {
+      font-family: var(--font-mono);
+      font-size: 13px; color: var(--muted);
+      text-align: right;
+    }
+    .aspect-sentiment {
+      font-family: var(--font-mono); font-size: 13px;
+      padding: 3px 8px; border-radius: 4px;
+      text-align: center;
+    }
+    .aspect-sentiment.positive { color: var(--pos); background: rgba(79,255,176,0.08); }
+    .aspect-sentiment.negative { color: var(--neg); background: rgba(255,87,87,0.08); }
+    .aspect-sentiment.mixed    { color: var(--accent); background: rgba(232,255,87,0.08); }
+    .aspect-mentions { font-family: var(--font-mono); font-size: 13px; color: var(--muted); }
+
+    /* discovered topics */
+    .topics-list { display: flex; flex-wrap: wrap; gap: 8px; }
+    .topic-chip {
+      font-family: var(--font-mono); font-size: 13px;
+      padding: 6px 14px; border-radius: 6px;
+      background: var(--demo-dim);
+      border: 1px solid rgba(192,132,252,0.2);
+      color: var(--demo);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .topic-chip-count {
+      background: rgba(192,132,252,0.15);
+      padding: 1px 6px; border-radius: 3px; font-size: 13px;
+    }
+
+    /* ── Empty state ── */
+    .empty { font-family: var(--font-mono); font-size: 13px; color: var(--muted); padding: 8px 0; }
+
+    /* ── divider ── */
+    .divider {
+      border: none; border-top: 1px solid var(--border);
+      margin: 24px 0;
+    }
+  </style>
+</head>
+<body>
+<div class="toast-rack" id="toast-rack"></div>
+<div class="wrap">
+
+  <!-- Header -->
+  <header>
+    <div class="logo-block">
+      <div class="logo-eyebrow">NLP · Sentiment · Aspects</div>
+      <h1>Review<span>Insights</span></h1>
+    </div>
+    <div id="status-pill" class="status-pill">
+      <span class="status-dot"></span>
+      <span id="status-text">connecting…</span>
+    </div>
+  </header>
+
+  <!-- Mode tabs -->
+  <div class="mode-tabs">
+    <button class="tab-btn active-dataset" id="tab-dataset" onclick="switchTab('dataset')">
+      <span class="tab-dot"></span>Dataset Mode
+    </button>
+    <button class="tab-btn" id="tab-demo" onclick="switchTab('demo')">
+      <span class="tab-dot"></span>Demo Mode
+    </button>
+  </div>
+
+  <!-- ══════════════════════ DATASET PANEL ══════════════════════ -->
+  <div class="panel active" id="panel-dataset">
+
+    <!-- Search -->
+    <div class="search-section">
+      <label class="search-label" for="pid-input">Enter Product ID</label>
+      <div class="search-row">
+        <input type="text" id="pid-input" placeholder="e.g. B001E4KFA3" autocomplete="off" spellcheck="false"/>
+        <button class="primary" id="analyze-btn" onclick="analyzeProduct()">Analyze →</button>
+      </div>
+    </div>
+
+    <!-- Product browser -->
+    <div class="products-bar">
+      <span class="section-title">Products in dataset</span>
+      <div class="products-bar-right">
+        <span class="product-count" id="prod-count">—</span>
+        <div class="page-nav">
+          <button class="page-btn" id="prev-btn" onclick="changePage(-1)" disabled>&#8592;</button>
+          <span class="page-info" id="page-info">1 / 1</span>
+          <button class="page-btn" id="next-btn" onclick="changePage(1)" disabled>&#8594;</button>
+        </div>
+      </div>
+    </div>
+    <div class="products-scroll" id="products-list">
+      <span style="font-family:var(--font-mono);font-size:13px;color:var(--muted)">Loading products…</span>
+    </div>
+
+    <!-- Error -->
+    <div class="error-box" id="error-box"></div>
+
+    <!-- Loader -->
+    <div class="loader" id="loader">
+      <div class="spinner"></div>
+      <p>Analysing reviews…</p>
+    </div>
+
+    <!-- Results -->
+    <div id="results">
+      <div class="result-header">
+        <div>
+          <div class="result-pid" id="res-pid"></div>
+          <div class="result-summary" id="res-summary"></div>
+        </div>
+        <div class="confidence-badge">
+          <div class="confidence-level" id="res-confidence"></div>
+          <div class="review-count" id="res-count"></div>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <div class="card-title"><span class="dot dot-pos"></span>Pros</div>
+          <div id="pros-list"></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><span class="dot dot-neg"></span>Cons</div>
+          <div id="cons-list"></div>
+        </div>
+      </div>
+
+      <div class="card aspects-card">
+        <div class="card-title"><span class="dot dot-asp"></span>Top Aspects by Mention</div>
+        <div class="aspects-list" id="aspects-list"></div>
+      </div>
+    </div>
+
+  </div><!-- /panel-dataset -->
+
+  <!-- ══════════════════════ DEMO PANEL ══════════════════════ -->
+  <div class="panel" id="panel-demo">
+
+    <!-- Step 1: Create / select demo product -->
+    <div class="demo-step">
+      <div class="demo-step-label">
+        <span class="step-num">1</span>
+        Create or select a demo product
+      </div>
+      <div class="form-row">
+        <div class="form-col">
+          <div class="form-group">
+            <label class="form-label" for="demo-pid-input">Product ID</label>
+            <input type="text" id="demo-pid-input" placeholder="e.g. demo_phone_1" autocomplete="off" spellcheck="false" style="border-color: rgba(192,132,252,0.3)"/>
+          </div>
+          <div class="form-hint">Use any name — it lives only in memory.</div>
+        </div>
+        <button class="demo-btn" id="create-demo-btn" onclick="createDemoProduct()" style="align-self:flex-end; margin-bottom:20px">
+          + Create
+        </button>
+      </div>
+
+      <!-- Existing demo products list -->
+      <div id="demo-products-list" style="display:none; margin-top:8px;">
+        <div class="form-label" style="margin-bottom:8px;">Existing demo products</div>
+        <div class="products-scroll" id="demo-chips" style="margin-bottom:0; min-height:36px;"></div>
+      </div>
+    </div>
+
+    <!-- Active demo product header (shown once a product is selected) -->
+    <div class="demo-header" id="demo-active-header" style="display:none;">
+      <div class="demo-header-left">
+        <div class="demo-eyebrow">▸ Active demo product</div>
+        <div class="demo-product-name" id="demo-active-name">—</div>
+        <div class="demo-review-count" id="demo-active-count">0 reviews</div>
+      </div>
+      <div class="demo-header-actions">
+        <button class="ghost-btn" onclick="deleteDemoProduct()">Delete product</button>
+      </div>
+    </div>
+
+    <!-- Step 2: Add reviews -->
+    <div class="demo-step" id="step-add-review" style="opacity:0.4; pointer-events:none;">
+      <div class="demo-step-label">
+        <span class="step-num">2</span>
+        Add reviews
+      </div>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label class="form-label" for="demo-review-text">Review text</label>
+        <textarea id="demo-review-text" placeholder="e.g. The battery lasts surprisingly long but the screen gets dim outdoors…" style="border-color: rgba(192,132,252,0.2)"></textarea>
+      </div>
+
+      <div class="form-row" style="gap:16px; align-items:flex-end;">
+        <div class="form-group" style="flex:1;">
+          <label class="form-label">Star rating (optional)</label>
+          <div class="rating-row">
+            <button class="star-btn" data-val="1" onclick="setRating(1)">★</button>
+            <button class="star-btn" data-val="2" onclick="setRating(2)">★</button>
+            <button class="star-btn" data-val="3" onclick="setRating(3)">★</button>
+            <button class="star-btn" data-val="4" onclick="setRating(4)">★</button>
+            <button class="star-btn" data-val="5" onclick="setRating(5)">★</button>
+            <span class="rating-val" id="rating-val">none</span>
+          </div>
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label class="form-label" for="demo-summary">Summary (optional)</label>
+          <input type="text" id="demo-summary" placeholder="One-line summary" style="border-color: rgba(192,132,252,0.2)"/>
+        </div>
+        <button class="demo-btn" id="add-review-btn" onclick="addDemoReview()" style="flex-shrink:0;">
+          Add review
+        </button>
+      </div>
+
+      <!-- Review queue -->
+      <div id="review-queue-wrap" style="display:none; margin-top:16px;">
+        <hr class="divider" style="margin:0 0 12px;"/>
+        <div class="form-label" style="margin-bottom:8px;">Reviews queued (<span id="queue-count">0</span>)</div>
+        <div class="review-queue" id="review-queue"></div>
+      </div>
+    </div>
+
+    <!-- Step 3: Analyse -->
+    <div class="demo-step" id="step-analyze" style="opacity:0.4; pointer-events:none;">
+      <div class="demo-step-label">
+        <span class="step-num">3</span>
+        Analyse
+      </div>
+      <p style="font-family:var(--font-mono); font-size:13px; color:var(--muted); margin-bottom:14px;">
+        Need at least 3 reviews for meaningful insights.
+      </p>
+      <button class="primary" id="demo-analyze-btn" onclick="analyzeDemoProduct()">
+        Run analysis →
+      </button>
+    </div>
+
+    <!-- Demo loader -->
+    <div class="loader" id="demo-loader">
+      <div class="spinner demo-spin"></div>
+      <p>Analysing demo reviews…</p>
+    </div>
+
+    <!-- Demo results -->
+    <div id="demo-results">
+      <div class="result-header demo-result-header">
+        <div>
+          <div class="result-pid demo-pid" id="demo-res-pid"></div>
+          <div class="result-summary" id="demo-res-summary"></div>
+        </div>
+        <div class="confidence-badge">
+          <div class="confidence-level" id="demo-res-confidence"></div>
+          <div class="review-count" id="demo-res-count"></div>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <div class="card-title"><span class="dot dot-pos"></span>Pros</div>
+          <div id="demo-pros-list"></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><span class="dot dot-neg"></span>Cons</div>
+          <div id="demo-cons-list"></div>
+        </div>
+      </div>
+
+      <div class="card aspects-card">
+        <div class="card-title"><span class="dot dot-asp"></span>Top Aspects by Mention</div>
+        <div class="aspects-list" id="demo-aspects-list"></div>
+      </div>
+
+      <!-- Discovered topics (from BERTopic) -->
+      <div class="card" id="demo-topics-card" style="display:none; margin-top:0;">
+        <div class="card-title"><span class="dot dot-disc"></span>Discovered Topics</div>
+        <div class="topics-list" id="demo-topics-list"></div>
+      </div>
+    </div>
+
+  </div><!-- /panel-demo -->
+
+</div><!-- /wrap -->
+
+<script>
+  const API = '';  // same origin; adjust if Flask runs elsewhere e.g. 'http://localhost:5000'
+
+  /* ════════════════════════════════════════════════
+     SHARED UTILITIES
+  ════════════════════════════════════════════════ */
+
+  function toast(msg, type = 'info', duration = 3000) {
+    const rack = document.getElementById('toast-rack');
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.textContent = msg;
+    rack.appendChild(el);
+    setTimeout(() => {
+      el.style.animation = 'slideOut 0.25s ease forwards';
+      setTimeout(() => el.remove(), 260);
+    }, duration);
+  }
+
+  function switchTab(tab) {
+    document.getElementById('panel-dataset').classList.toggle('active', tab === 'dataset');
+    document.getElementById('panel-demo').classList.toggle('active',    tab === 'demo');
+    document.getElementById('tab-dataset').className = 'tab-btn' + (tab === 'dataset' ? ' active-dataset' : '');
+    document.getElementById('tab-demo').className    = 'tab-btn' + (tab === 'demo'    ? ' active-demo'    : '');
+    if (tab === 'demo') loadDemoProductList();
+  }
+
+  /* ════════════════════════════════════════════════
+     HEALTH CHECK
+  ════════════════════════════════════════════════ */
+
+  async function checkHealth() {
+    try {
+      const r = await fetch(`${API}/api/v1/health`);
+      const d = await r.json();
+      const pill = document.getElementById('status-pill');
+      const txt  = document.getElementById('status-text');
+      if (d.status === 'ok') {
+        pill.className = 'status-pill ok';
+        txt.textContent = `${d.products_loaded.toLocaleString()} products · ${d.total_reviews.toLocaleString()} reviews`;
+      } else {
+        pill.className = 'status-pill degraded';
+        txt.textContent = 'degraded – check data files';
+      }
+    } catch(e) {
+      document.getElementById('status-pill').className = 'status-pill degraded';
+      document.getElementById('status-text').textContent = 'API offline';
+    }
+  }
+
+  /* ════════════════════════════════════════════════
+     DATASET MODE
+  ════════════════════════════════════════════════ */
+
+  let currentPage = 1;
+  const PAGE_LIMIT = 80;
+
+  async function loadProducts(page = 1) {
+    try {
+      const r = await fetch(`${API}/api/v1/products?limit=${PAGE_LIMIT}&page=${page}`);
+      const d = await r.json();
+      document.getElementById('prod-count').textContent = `${d.total.toLocaleString()} total`;
+      document.getElementById('page-info').textContent  = `${page} / ${d.pages}`;
+      document.getElementById('prev-btn').disabled = page <= 1;
+      document.getElementById('next-btn').disabled = page >= d.pages;
+      const container = document.getElementById('products-list');
+      container.style.animation = 'none'; container.offsetHeight; container.style.animation = '';
+      container.innerHTML = d.products.length
+        ? d.products.map(pid => `<span class="product-chip" onclick="selectProduct('${pid}')">${pid}</span>`).join('')
+        : '<span style="font-family:var(--font-mono);font-size:13px;color:var(--muted)">No products found.</span>';
+    } catch(e) {
+      document.getElementById('products-list').innerHTML =
+        '<span style="font-family:var(--font-mono);font-size:13px;color:var(--muted)">Could not load products.</span>';
+    }
+  }
+
+  function changePage(dir) { currentPage += dir; loadProducts(currentPage); }
+
+  function selectProduct(pid) {
+    document.getElementById('pid-input').value = pid;
+    analyzeProduct();
+  }
+
+  async function analyzeProduct() {
+    const pid = document.getElementById('pid-input').value.trim();
+    if (!pid) return;
+    setError(''); setResults(false); setLoader(true);
+    document.getElementById('analyze-btn').disabled = true;
+    try {
+      const r = await fetch(`${API}/api/v1/insights`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: pid })
+      });
+      const d = await r.json();
+      if (!r.ok) { setError(d.error || 'Unknown error'); return; }
+      renderResults(d, 'dataset');
+    } catch(e) {
+      setError('Could not reach the API. Is Flask running?');
+    } finally {
+      setLoader(false);
+      document.getElementById('analyze-btn').disabled = false;
+    }
+  }
+
+  function setLoader(on)  { document.getElementById('loader').className  = on ? 'loader active' : 'loader'; }
+  function setResults(on) { document.getElementById('results').className = on ? 'active' : ''; }
+  function setError(msg)  {
+    const box = document.getElementById('error-box');
+    if (msg) { box.textContent = msg; box.className = 'error-box active'; }
+    else { box.className = 'error-box'; }
+  }
+
+  document.getElementById('pid-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') analyzeProduct();
+  });
+
+  /* ════════════════════════════════════════════════
+     DEMO MODE STATE
+  ════════════════════════════════════════════════ */
+
+  let activeDemoProduct = null;   // currently selected demo product ID
+  let selectedRating    = null;   // star rating for next review (1–5 or null)
+  let demoReviews       = [];     // local shadow of queued reviews (for display)
+
+  /* ── Load & render demo product chips ── */
+  async function loadDemoProductList() {
+    try {
+      const r = await fetch(`${API}/api/v1/demo-products`);
+      const d = await r.json();
+      const wrap  = document.getElementById('demo-products-list');
+      const chips = document.getElementById('demo-chips');
+      if (!d.demo_products.length) { wrap.style.display = 'none'; return; }
+      wrap.style.display = 'block';
+      chips.innerHTML = d.demo_products.map(p =>
+        `<span class="demo-product-chip ${p.product_id === activeDemoProduct ? 'selected' : ''}"
+               onclick="selectDemoProduct('${p.product_id}', ${p.review_count})">
+          ${p.product_id}
+          <span class="chip-count">${p.review_count}</span>
+        </span>`
+      ).join('');
+    } catch(e) { /* non-critical */ }
+  }
+
+  function selectDemoProduct(pid, reviewCount) {
+    activeDemoProduct = pid;
+    demoReviews = [];
+    updateDemoActiveHeader(pid, reviewCount);
+    unlockDemoSteps();
+    loadDemoProductList();
+    hideDemoResults();
+    toast(`Switched to "${pid}"`, 'info');
+  }
+
+  function updateDemoActiveHeader(pid, count) {
+    document.getElementById('demo-active-header').style.display = 'flex';
+    document.getElementById('demo-active-name').textContent  = pid;
+    document.getElementById('demo-active-count').textContent = `${count} review${count !== 1 ? 's' : ''}`;
+  }
+
+  function unlockDemoSteps() {
+    ['step-add-review', 'step-analyze'].forEach(id => {
+      const el = document.getElementById(id);
+      el.style.opacity = '1';
+      el.style.pointerEvents = 'auto';
+    });
+  }
+
+  function hideDemoResults() {
+    document.getElementById('demo-results').className = '';
+  }
+
+  /* ── Create demo product ── */
+  async function createDemoProduct() {
+    const raw = document.getElementById('demo-pid-input').value.trim();
+    if (!raw) { toast('Enter a product ID first.', 'error'); return; }
+
+    const btn = document.getElementById('create-demo-btn');
+    btn.disabled = true;
+    try {
+      const r = await fetch(`${API}/api/v1/demo-product`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: raw })
+      });
+      const d = await r.json();
+      if (!r.ok) { toast(d.error || 'Error creating product.', 'error'); return; }
+
+      const isNew = r.status === 201;
+      const pid   = d.product_id;
+      toast(isNew ? `"${pid}" created.` : `"${pid}" already exists.`, isNew ? 'success' : 'info');
+      document.getElementById('demo-pid-input').value = '';
+      selectDemoProduct(pid, d.review_count || 0);
+    } catch(e) {
+      toast('Could not reach the API.', 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  /* ── Delete demo product ── */
+  async function deleteDemoProduct() {
+    if (!activeDemoProduct) return;
+    if (!confirm(`Delete demo product "${activeDemoProduct}" and all its reviews?`)) return;
+
+    try {
+      const r = await fetch(`${API}/api/v1/demo-product?product_id=${encodeURIComponent(activeDemoProduct)}`, {
+        method: 'DELETE'
+      });
+      const d = await r.json();
+      if (!r.ok) { toast(d.error || 'Delete failed.', 'error'); return; }
+
+      toast(`"${activeDemoProduct}" deleted.`, 'success');
+      activeDemoProduct = null;
+      demoReviews = [];
+      document.getElementById('demo-active-header').style.display = 'none';
+      ['step-add-review', 'step-analyze'].forEach(id => {
+        document.getElementById(id).style.opacity = '0.4';
+        document.getElementById(id).style.pointerEvents = 'none';
+      });
+      document.getElementById('review-queue-wrap').style.display = 'none';
+      document.getElementById('review-queue').innerHTML = '';
+      document.getElementById('queue-count').textContent = '0';
+      hideDemoResults();
+      loadDemoProductList();
+    } catch(e) {
+      toast('Could not reach the API.', 'error');
+    }
+  }
+
+  /* ── Star rating ── */
+  function setRating(val) {
+    selectedRating = val;
+    document.querySelectorAll('.star-btn').forEach(b => {
+      b.classList.toggle('lit', parseInt(b.dataset.val) <= val);
+    });
+    document.getElementById('rating-val').textContent = `${val} / 5`;
+  }
+
+  /* ── Add demo review ── */
+  async function addDemoReview() {
+    if (!activeDemoProduct) { toast('No active demo product.', 'error'); return; }
+
+    const text    = document.getElementById('demo-review-text').value.trim();
+    const summary = document.getElementById('demo-summary').value.trim();
+    if (!text) { toast('Review text cannot be empty.', 'error'); return; }
+
+    const btn = document.getElementById('add-review-btn');
+    btn.disabled = true;
+    try {
+      const r = await fetch(`${API}/api/v1/demo-review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_id:  activeDemoProduct,
+          review_text: text,
+          summary:     summary,
+          rating:      selectedRating
+        })
+      });
+      const d = await r.json();
+      if (!r.ok) { toast(d.error || 'Failed to add review.', 'error'); return; }
+
+      // update local display
+      demoReviews.push({ text, summary, rating: selectedRating });
+      renderReviewQueue();
+      updateDemoActiveHeader(activeDemoProduct, d.review_count);
+
+      // reset fields
+      document.getElementById('demo-review-text').value = '';
+      document.getElementById('demo-summary').value = '';
+      selectedRating = null;
+      document.querySelectorAll('.star-btn').forEach(b => b.classList.remove('lit'));
+      document.getElementById('rating-val').textContent = 'none';
+
+      toast(`Review #${d.review_count} added.`, 'success');
+    } catch(e) {
+      toast('Could not reach the API.', 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function renderReviewQueue() {
+    const wrap  = document.getElementById('review-queue-wrap');
+    const queue = document.getElementById('review-queue');
+    document.getElementById('queue-count').textContent = demoReviews.length;
+    if (!demoReviews.length) { wrap.style.display = 'none'; return; }
+    wrap.style.display = 'block';
+    queue.innerHTML = [...demoReviews].reverse().map(r => `
+      <div class="review-item">
+        <div class="review-item-body">
+          <div class="review-item-text">${escHtml(r.text)}</div>
+          <div class="review-item-meta">
+            ${r.rating ? `<span class="star-display">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</span>` : ''}
+            ${r.summary ? `<span>${escHtml(r.summary)}</span>` : ''}
+          </div>
+        </div>
+      </div>`).join('');
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* ── Analyse demo product ── */
+  async function analyzeDemoProduct() {
+    if (!activeDemoProduct) return;
+
+    const btn = document.getElementById('demo-analyze-btn');
+    btn.disabled = true;
+    document.getElementById('demo-loader').className = 'loader active';
+    hideDemoResults();
+
+    try {
+      const r = await fetch(`${API}/api/v1/demo-insights?product_id=${encodeURIComponent(activeDemoProduct)}`);
+      const d = await r.json();
+      if (!r.ok) {
+        toast(d.error || 'Analysis failed.', 'error');
+        return;
+      }
+      renderResults(d, 'demo');
+    } catch(e) {
+      toast('Could not reach the API.', 'error');
+    } finally {
+      document.getElementById('demo-loader').className = 'loader';
+      btn.disabled = false;
+    }
+  }
+
+  /* ════════════════════════════════════════════════
+     SHARED RENDER
+  ════════════════════════════════════════════════ */
+
+  function renderResults(d, mode) {
+    const prefix = mode === 'demo' ? 'demo-' : '';
+
+    document.getElementById(`${prefix}res-pid`).textContent     = `${mode === 'demo' ? '▸ Demo: ' : 'Product: '}${d.product_id}`;
+    document.getElementById(`${prefix}res-summary`).textContent = d.summary;
+
+    const lvl   = d.confidence.level;
+    const badge = document.getElementById(`${prefix}res-confidence`);
+    badge.textContent = lvl.toUpperCase();
+    badge.className   = `confidence-level ${lvl}`;
+    document.getElementById(`${prefix}res-count`).textContent = `${d.review_count} reviews analysed`;
+
+    // Pros
+    document.getElementById(`${prefix}pros-list`).innerHTML = d.pros.length
+      ? d.pros.map(p => `
+          <div class="pc-item pro">
+            <div class="pc-aspect">${p.aspect}</div>
+            <div class="pc-desc">${p.description}</div>
+            <div class="pc-evidence">"${escHtml(p.evidence)}"</div>
+          </div>`).join('')
+      : '<div class="empty">No notable pros detected.</div>';
+
+    // Cons
+    document.getElementById(`${prefix}cons-list`).innerHTML = d.cons.length
+      ? d.cons.map(c => `
+          <div class="pc-item con">
+            <div class="pc-aspect">${c.aspect}</div>
+            <div class="pc-desc">${c.description}</div>
+            <div class="pc-evidence">"${escHtml(c.evidence)}"</div>
+          </div>`).join('')
+      : '<div class="empty">No notable cons detected.</div>';
+
+    // Aspects
+    const maxMentions = Math.max(...d.top_aspects.map(a => a.mention_count), 1);
+    document.getElementById(`${prefix}aspects-list`).innerHTML = d.top_aspects.length
+      ? d.top_aspects.map(a => {
+          const pct = Math.round((a.mention_count / maxMentions) * 100);
+          return `
+            <div class="aspect-row">
+              <div class="aspect-name">${a.aspect}</div>
+              <div class="bar-track"><div class="bar-fill ${a.sentiment}" style="width:${pct}%"></div></div>
+              <div class="aspect-score">${a.score > 0 ? '+' : ''}${a.score}</div>
+              <div class="aspect-sentiment ${a.sentiment}">${a.sentiment}</div>
+              <div class="aspect-mentions">${a.mention_count} mentions</div>
+            </div>`;
+        }).join('')
+      : '<div class="empty">No aspects found.</div>';
+
+    // Discovered topics (demo only, from BERTopic)
+    if (mode === 'demo') {
+      const topicsCard = document.getElementById('demo-topics-card');
+      const topicsList = document.getElementById('demo-topics-list');
+      const topics     = d.discovered_aspects || [];
+      if (topics.length) {
+        topicsList.innerHTML = topics.map(t => `
+          <span class="topic-chip">
+            ${escHtml(t.label)}
+            <span class="topic-chip-count">${t.count}</span>
+          </span>`).join('');
+        topicsCard.style.display = 'block';
+      } else {
+        topicsCard.style.display = 'none';
+      }
+      document.getElementById('demo-results').className = 'active';
+    } else {
+      setResults(true);
+    }
+  }
+
+  /* ════════════════════════════════════════════════
+     INIT
+  ════════════════════════════════════════════════ */
+  checkHealth();
+  loadProducts(1);
+</script>
+</body>
+</html>
