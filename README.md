@@ -6,7 +6,25 @@ All outputs are **grounded in your dataset** — no hallucination, no fabricated
 
 ---
 
-## Supported CSV Schemas
+## Dataset
+
+This project uses two publicly available Amazon review datasets:
+
+| Dataset | Source | Format |
+|---------|--------|--------|
+| Amazon Fine Food Reviews | [Kaggle](https://www.kaggle.com/datasets/snap/amazon-fine-food-reviews) | CSV |
+| Amazon Electronics Reviews | [Kaggle](https://www.kaggle.com/datasets/snap/amazon-reviews) | JSONL |
+
+### Setup
+Download the files and place them in the `data/` folder:
+```
+data/Reviews1.csv
+data/Reviews2.json
+```
+
+---
+
+## Supported Schemas
 
 ### Reviews1.csv  (Amazon Food Reviews style)
 | Column | Description |
@@ -22,7 +40,7 @@ All outputs are **grounded in your dataset** — no hallucination, no fabricated
 | `Summary` | Short review headline |
 | `Text` | Full review body ← **primary analysis field** |
 
-### Reviews2.csv  (Amazon Electronics / JSON-export style)
+### Reviews2.json  (Amazon Electronics / JSONL style)
 | Column | Description |
 |--------|-------------|
 | `asin` | Product identifier (e.g. `0528881469`) |
@@ -45,12 +63,12 @@ Both schemas are **auto-detected** at startup based on header column names.
 product_review_api/
 ├── main.py           # Flask API — routes, middleware, error handling
 ├── analyzer.py       # NLP engine — aspect extraction + sentiment analysis
-├── data_loader.py    # CSV loader — auto-detects schema, merges both files
-├── schemas.py        # Data structure documentation
-├── requirements.txt  # Python dependencies
+├── data_loader.py    # Data loader — supports CSV and JSONL, merges both files
+├── demo_store.py     # In-memory store for Demo Product Mode
+├── index.html        # Frontend UI — dark-themed, product browser + demo mode
 ├── data/
 │   ├── Reviews1.csv  # ← Place your Reviews1.csv here
-│   └── Reviews2.csv  # ← Place your Reviews2.csv here
+│   └── Reviews2.json # ← Place your Reviews2.json here
 ├── logs/
 │   └── api.log       # Runtime logs
 └── README.md
@@ -62,19 +80,19 @@ product_review_api/
 
 ### 1. Install dependencies
 ```bash
-pip install flask
+pip install flask transformers torch sentence-transformers bertopic
 ```
 
-### 2. Place your CSV files
+### 2. Place your dataset files
 ```
-product_review_api/data/Reviews1.csv
-product_review_api/data/Reviews2.json
+data/Reviews1.csv
+data/Reviews2.json
 ```
 
 Or use environment variables to point to custom paths:
 ```bash
-export REVIEWS_CSV1=/path/to/your/Reviews1.csv
-export REVIEWS_CSV2=/path/to/your/Reviews2.json
+export REVIEWS_CSV=/path/to/your/Reviews1.csv
+export REVIEWS_JSON=/path/to/your/Reviews2.json
 ```
 
 ### 3. Start the API
@@ -91,7 +109,7 @@ Server starts at `http://localhost:5000`
 ```json
 {
   "status": "ok",
-  "csv_files_loaded": ["Reviews1.csv", "Reviews2.csv"],
+  "files_loaded": ["Reviews1.csv", "Reviews2.json"],
   "products_loaded": 2874,
   "total_reviews": 568454
 }
@@ -169,6 +187,32 @@ Convenience GET version.
 
 ---
 
+## Demo Product Mode
+
+Test the API without a dataset by creating a demo product and adding reviews manually.
+
+### `POST /api/v1/demo-product`
+```json
+{ "product_id": "my_test_phone" }
+```
+
+### `POST /api/v1/demo-review`
+```json
+{
+  "product_id": "my_test_phone",
+  "review_text": "Battery lasts all day and the camera is excellent",
+  "rating": 5
+}
+```
+
+### `GET /api/v1/demo-insights?product_id=my_test_phone`
+Returns full insights (same shape as `/api/v1/insights`).
+
+### `DELETE /api/v1/demo-product?product_id=my_test_phone`
+Removes the demo product from memory.
+
+---
+
 ## Example API Calls
 
 ### cURL — POST
@@ -207,8 +251,8 @@ for con in data["cons"]:
 | Status | Scenario |
 |--------|----------|
 | `400` | Missing / empty / too-long `product_id`, non-JSON body |
-| `404` | Product not found in either dataset |
-| `503` | Neither CSV file could be loaded |
+| `404` | Product not found in dataset |
+| `503` | No dataset loaded |
 
 ```json
 { "error": "Product 'XYZ' not found in the dataset." }
@@ -218,23 +262,23 @@ for con in data["cons"]:
 
 ## Confidence Levels
 
-| Level | Reviews |
+| Level | Criteria |
 |-------|---------|
-| `high` | ≥ 50 |
-| `medium` | 3 – 49 |
-| `low` | < 3 |
-| `insufficient` | 0 (not enough data) |
+| `high` | ≥ 50 reviews, low rating variance, helpful votes present |
+| `medium` | 9 – 49 reviews |
+| `low` | 4 – 8 reviews |
+| `insufficient` | < 4 reviews |
 
 ---
 
 ## How It Works
 
-1. **Data loading** — Both CSVs are loaded at startup, schema auto-detected, merged and de-duplicated
+1. **Data loading** — Both files loaded at startup, schema auto-detected, merged and de-duplicated
 2. **Text preprocessing** — HTML tag removal, URL stripping, whitespace normalization
-3. **Aspect extraction** — 19-category keyword taxonomy maps review sentences to aspects
-4. **Sentiment analysis** — Lexicon-based per-sentence scoring with negation handling; calibrated using star ratings
-5. **Evidence selection** — Best/worst actual review sentences surfaced as evidence (never invented)
-6. **Confidence scoring** — Based on review volume per product
+3. **Aspect extraction** — 19-category keyword taxonomy + SentenceTransformer semantic similarity
+4. **Sentiment analysis** — DistilBERT per-sentence scoring with negation handling + star rating calibration
+5. **Evidence selection** — Best actual review sentences surfaced as evidence (never invented)
+6. **Confidence scoring** — Three-axis: review volume · rating agreement · helpfulness weighting
 
 ---
 
@@ -243,6 +287,6 @@ for con in data["cons"]:
 | Criterion | Implementation |
 |-----------|----------------|
 | Correctness & Functionality (40%) | Aspect extraction, sentiment, pros/cons with evidence, confidence, "not enough data" |
-| AI/ML Quality (30%) | Lexicon NLP + negation + rating calibration; no hallucination |
-| API Design (20%) | REST endpoints, input validation, pagination, timing headers, structured errors |
-| Documentation (10%) | This README with setup, run instructions, and example calls |
+| AI/ML Quality (30%) | DistilBERT + SentenceTransformer + negation + rating calibration; no hallucination |
+| API Design (20%) | REST endpoints, input validation, pagination, timing headers, structured errors, demo mode |
+| Documentation (10%) | This README with setup, run instructions, dataset links, and example calls |
